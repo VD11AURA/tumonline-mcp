@@ -82,9 +82,70 @@ def _range(von: str | None, bis: str | None, default_days: int) -> tuple[date, d
     return start, end
 
 
+def current_semester(today: date | None = None) -> str:
+    """Studiensemester im TUMonline-Format: '26W' von September bis März, sonst '26S'.
+
+    Ab September zählt schon das kommende Wintersemester (Vorkurse, Anmeldung),
+    obwohl TUMonline intern noch das Sommersemester als aktuell führt.
+    """
+    d = today or date.today()
+    if d.month >= 9:
+        return f"{d.year % 100:02d}W"
+    if d.month <= 3:
+        return f"{(d.year - 1) % 100:02d}W"
+    return f"{d.year % 100:02d}S"
+
+
+def _semester_rank(semester_id: str) -> int | None:
+    """'26W' → 53, '26S' → 52 (fortlaufend, zum Vergleichen)."""
+    if len(semester_id) == 3 and semester_id[:2].isdigit() and semester_id[2] in "SW":
+        return int(semester_id[:2]) * 2 + (semester_id[2] == "W")
+    return None
+
+
+def _normalize_semester(value: str) -> str:
+    v = value.strip().upper().replace(" ", "")
+    if len(v) == 3 and v[:2].isdigit() and v[2] in "SW":
+        return v
+    raise TUMonlineError("Semester bitte im Format '26W' (Wintersemester 2026/27) oder '26S' angeben.")
+
+
+def _termin(t: dict[str, str]) -> dict:
+    return {
+        "beginn": t.get("beginn_datum_zeitpunkt", ""),
+        "ende": t.get("ende_datum_zeitpunkt", ""),
+        "ort": t.get("ort", ""),
+        "raum_suche": t.get("raum_nr_architekt", ""),
+        "art": t.get("art", ""),
+        "betreff": t.get("termin_betreff", ""),
+        "gruppe": t.get("lv_grp_name", ""),
+    }
+
+
+async def _termine_aus_kalender(lv_nr: str, alle: bool) -> list[dict]:
+    """Ersatzquelle: TUMonline liefert für LVs ohne Gruppen keine Terminliste, der
+    persönliche Kalender verlinkt die Termine aber mit cLvNr=<stp_sp_nr>."""
+    today = date.today()
+    start = today - timedelta(days=62) if alle else today
+    out = []
+    for ev in await _calendar(start, today + timedelta(days=183)):
+        if re.search(rf"[?&]cLvNr={re.escape(lv_nr)}(?:&|$)", ev["url"]):
+            out.append({
+                "beginn": ev["beginn"][:16],
+                "ende": ev["ende"][:16],
+                "ort": ev["ort"],
+                "raum_id": ev.get("raum_id", ""),
+                "karte": ev.get("karte", ""),
+                "art": "abgesagt" if ev["abgesagt"] else "Abhaltung",
+                "betreff": ev["beschreibung"],
+                "gruppe": "",
+            })
+    return out
+
+
 def _course(r: dict[str, str]) -> dict:
     return {
-        "lv_nr": r.get("stp_sp_nr", ""),
+        "lv_nr": r.get("stp_sp_nr", ""),  # interne Nummer, die kurs_details erwartet
         "titel": r.get("stp_sp_titel", ""),
         "art": r.get("stp_lv_art_name", ""),
         "sws": r.get("dauer_info", ""),
@@ -179,33 +240,71 @@ async def kurse(semester: str | None = None) -> list[dict]:
 
 @mcp.tool()
 async def kurs_details(lv_nr: str, gruppe: str | None = None, alle_termine: bool = False) -> dict:
-    """Details und Termine einer Lehrveranstaltung (lv_nr aus `kurse` oder `veranstaltung_suchen`).
+    """Details und Termine einer Lehrveranstaltung.
 
+    lv_nr ist die interne TUMonline-Nummer (stp_sp_nr), also genau das Feld `lv_nr` aus
+    `kurse` oder `veranstaltung_suchen` bzw. die Zahl hinter cLvNr= in Kalender-Links
+    (z. B. 950944616). Andere Nummern (z. B. stp_lv_nr) können einen fremden, alten Kurs
+    treffen; das Ergebnis enthält dann eine Warnung.
     gruppe: nur Termine dieser Übungsgruppe, z. B. '02' oder 'Gruppe 02'.
     Standard: nur kommende Termine; alle_termine=True liefert auch vergangene.
     """
-    details = await client.records("veranstaltungenDetails", pLVNr=lv_nr)
+    details_rows = await client.records("veranstaltungenDetails", pLVNr=lv_nr)
+    details = details_rows[0] if details_rows else {}
+    warnungen = []
+    if not details:
+        warnungen.append(f"Keine Lehrveranstaltung mit stp_sp_nr {lv_nr} gefunden.")
+    else:
+        if details.get("stp_sp_nr") and details["stp_sp_nr"] != lv_nr:
+            warnungen.append(
+                f"{lv_nr} ist keine stp_sp_nr; TUMonline hat stattdessen die LV mit stp_sp_nr "
+                f"{details['stp_sp_nr']} geliefert. Nummer aus `kurse`/`veranstaltung_suchen` (Feld lv_nr) verwenden."
+            )
+        rank, current = _semester_rank(details.get("semester_id", "")), _semester_rank(current_semester())
+        if rank is not None and current is not None and rank < current - 1:
+            warnungen.append(
+                f"Achtung: Diese LV ist aus dem {details.get('semester_name') or details.get('semester_id')} "
+                "und damit älter als das Vorsemester – vermutlich die falsche Nummer."
+            )
+
+    quelle = "TUMonline-Terminliste"
     try:
-        termine = await client.records("veranstaltungenTermine", pLVNr=lv_nr)
+        roh = await client.records("veranstaltungenTermine", pLVNr=lv_nr)
     except TUMonlineError as e:
-        termine = [{"fehler": str(e)}]
+        roh, warnungen = [], [*warnungen, f"Terminliste nicht abrufbar: {e}"]
+    termine = [_termin(t) for t in roh]
     if not alle_termine:
         today = date.today()
-        termine = [
-            t for t in termine
-            if (dt := _parse_dt(t.get("beginn_datum_zeitpunkt", ""))) is None or dt.date() >= today
-        ]
+        termine = [t for t in termine if (dt := _parse_dt(t["beginn"])) is None or dt.date() >= today]
+    if not roh:
+        termine = await _termine_aus_kalender(lv_nr, alle_termine)
+        quelle = "persönlicher Kalender (TUMonline liefert für diese LV keine Terminliste)"
+        if not termine:
+            warnungen.append(
+                "TUMonline liefert für diese LV keine Terminliste, und im persönlichen Kalender stehen "
+                "keine Termine dazu (nur für LVs, für die du angemeldet bist). Siehe details.ersttermin."
+            )
     if gruppe:
         g = gruppe.lower().removeprefix("gruppe").strip()
-        termine = [t for t in termine if g in t.get("lv_grp_name", "").lower()]
-    gruppen = sorted({t.get("lv_grp_name", "") for t in termine if t.get("lv_grp_name")})
-    return {"details": details[0] if details else {}, "gruppen": gruppen, "termine": termine}
+        termine = [t for t in termine if g in t["gruppe"].lower()]
+    gruppen = sorted({t["gruppe"] for t in termine if t["gruppe"]})
+    out = {"details": details, "gruppen": gruppen, "termine_quelle": quelle, "termine": termine}
+    if warnungen:
+        out["warnungen"] = warnungen
+    return out
 
 
 @mcp.tool()
-async def veranstaltung_suchen(suchbegriff: str) -> list[dict]:
-    """Sucht Lehrveranstaltungen im TUMonline-Katalog nach Titel."""
-    return [_course(r) for r in await client.records("veranstaltungenSuche", pSuche=suchbegriff)]
+async def veranstaltung_suchen(suchbegriff: str, semester: str | None = None) -> list[dict]:
+    """Sucht Lehrveranstaltungen im TUMonline-Katalog nach Titel.
+
+    semester im Format '26W' (Wintersemester 2026/27) oder '26S'. Standard: das aktuelle
+    Studiensemester (ab September schon das kommende Wintersemester).
+    Das Feld lv_nr im Ergebnis ist die Nummer für `kurs_details`.
+    """
+    sem = _normalize_semester(semester) if semester else current_semester()
+    rows = await client.records("veranstaltungenSuche", pSuche=suchbegriff, pSemester=sem)
+    return [_course(r) for r in rows]
 
 
 @mcp.tool()

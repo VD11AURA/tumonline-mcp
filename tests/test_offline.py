@@ -49,3 +49,14 @@ def test_extract_moodle_token():
     assert _extract_moodle_token("  abc123  ") == "abc123"
     url = "moodlemobile://token=" + base64.b64encode(b"sig:::tok456:::priv").decode()
     assert _extract_moodle_token(url) == "tok456"
+
+
+def test_current_semester_and_rank():
+    assert server.current_semester(date(2026, 9, 23)) == "26W"
+    assert server.current_semester(date(2027, 3, 31)) == "26W"
+    assert server.current_semester(date(2027, 4, 1)) == "27S"
+    assert server._semester_rank("26W") - server._semester_rank("26S") == 1
+    assert server._semester_rank("27S") - server._semester_rank("26W") == 1
+    assert server._normalize_semester(" 26w ") == "26W"
+    with pytest.raises(client.TUMonlineError):
+        server._normalize_semester("WS 2026/27")
