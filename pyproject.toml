@@ -16,6 +16,8 @@ dependencies = [
 tumonline-mcp = "tumonline_mcp.server:run"
 tumonline-token = "tumonline_mcp.token_setup:main"
 moodle-token = "tumonline_mcp.token_setup:moodle_main"
+moodle-sync = "tumonline_mcp.sync_cli:main"
+tum-watch = "tumonline_mcp.watch:main"
 
 [build-system]
 requires = ["uv_build>=0.12.7,<0.13.0"]

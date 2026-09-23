@@ -49,3 +49,26 @@ async def get_json(url: str, params: dict | None = None, *, ttl: float = 0, labe
 
 def clear_cache() -> None:
     _cache.clear()
+
+
+async def download(url: str, params: dict, dest, *, label: str = "Download") -> int:
+    """Lädt eine Datei nach dest (erst .part, dann umbenennen). Gibt die Größe zurück."""
+    tmp = dest.with_name(dest.name + ".part")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    size = 0
+    try:
+        async with httpx.AsyncClient(timeout=120, follow_redirects=True) as http:
+            async with http.stream("GET", url, params=params) as resp:
+                resp.raise_for_status()
+                with open(tmp, "wb") as f:
+                    async for chunk in resp.aiter_bytes():
+                        f.write(chunk)
+                        size += len(chunk)
+    except httpx.HTTPStatusError as e:
+        tmp.unlink(missing_ok=True)
+        raise ServiceError(f"{label}: HTTP {e.response.status_code}") from e
+    except httpx.HTTPError as e:
+        tmp.unlink(missing_ok=True)
+        raise ServiceError(f"{label} fehlgeschlagen ({type(e).__name__})") from e
+    tmp.replace(dest)
+    return size

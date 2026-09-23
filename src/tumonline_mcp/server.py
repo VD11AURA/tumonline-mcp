@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 
 from mcp.server.mcpserver import MCPServer
 
-from . import client, mensa as eat, moodle as mdl, navigatum
+from . import client, mensa as eat, moodle as mdl, moodle_sync, navigatum
 from .client import TUMonlineError
 
 mcp = MCPServer(
@@ -15,7 +15,8 @@ mcp = MCPServer(
     instructions=(
         "Tools für das TUM-Studium. TUMonline: Kalender/Stundenplan, eigene Lehrveranstaltungen, "
         "Prüfungstermine, Noten. NavigaTUM: Räume und Gebäude finden (Adresse, Karte). "
-        "Mensa: Speisepläne der Studierendenwerk-Mensen. Moodle: Kurse, Abgabefristen, Materialien. "
+        "Mensa: Speisepläne der Studierendenwerk-Mensen. Moodle: Kurse, Abgabefristen, Materialien, "
+        "Ankündigungen, Übungspunkte und Datei-Abgleich in die lokalen Studium-Ordner. "
         "Bei Fehlern zuerst `status` aufrufen."
     ),
 )
@@ -281,9 +282,12 @@ async def mensen() -> list[dict]:
 
 
 @mcp.tool()
-async def moodle_kurse() -> list[dict]:
-    """Eigene Moodle-Kurse der TUM (kurs_id für `moodle_kursinhalt`)."""
-    return await mdl.courses()
+async def moodle_kurse(nur_aktuelle: bool = True) -> list[dict]:
+    """Eigene Moodle-Kurse der TUM (kurs_id für die anderen moodle_*-Tools).
+
+    nur_aktuelle=False zeigt auch Kurse vergangener Semester.
+    """
+    return await mdl.courses(nur_aktuelle)
 
 
 @mcp.tool()
@@ -296,6 +300,47 @@ async def moodle_fristen(tage: int = 14) -> list[dict]:
 async def moodle_kursinhalt(kurs_id: int) -> list[dict]:
     """Abschnitte, Materialien und Dateinamen eines Moodle-Kurses (mit Änderungsdatum)."""
     return await mdl.course_contents(kurs_id)
+
+
+@mcp.tool()
+async def moodle_ankuendigungen(tage: int = 14, kurs_id: int | None = None) -> list[dict]:
+    """Ankündigungen der Lehrenden (Nachrichtenforen) der letzten `tage` Tage, neueste zuerst.
+
+    Ohne kurs_id: alle aktuellen Kurse.
+    """
+    ids = [kurs_id] if kurs_id else [c["kurs_id"] for c in await mdl.courses(nur_aktuelle=True)]
+    return await mdl.announcements(ids, max(1, min(tage, 365)))
+
+
+@mcp.tool()
+async def moodle_punkte(kurs_id: int | None = None) -> list[dict]:
+    """Bewertungen/Übungspunkte aus Moodle mit Summe erreichter und möglicher Punkte.
+
+    Ohne kurs_id: alle aktuellen Kurse. Ob ein Bonus erreicht ist, hängt von der
+    Bonusregel des Kurses ab (steht meist in der Kursbeschreibung/Ankündigung).
+    """
+    courses = await mdl.courses(nur_aktuelle=True)
+    names = {c["kurs_id"]: c["name"] for c in courses}
+    out = []
+    for cid in [kurs_id] if kurs_id else list(names):
+        try:
+            g = await mdl.grades(cid)
+        except mdl.ServiceError as e:
+            g = {"kurs_id": cid, "fehler": str(e)}
+        g["kurs"] = names.get(cid, "")
+        out.append(g)
+    return out
+
+
+@mcp.tool()
+async def moodle_dateien_sync(probelauf: bool = False) -> dict:
+    """Lädt neue/geänderte Moodle-Dateien der aktuellen Kurse in ~/Studium/<Semester>/<Fach>/…
+
+    Sortiert nach Übungen / Skript / Altklausuren / Moodle-Sonstiges. Lokal geänderte
+    Dateien werden nie überschrieben. probelauf=True zeigt nur an, was geladen würde.
+    Die Zuordnung Kurs → Ordner steht in .state/moodle_ordner.json und ist anpassbar.
+    """
+    return await moodle_sync.sync(dry_run=probelauf)
 
 
 def run() -> None:
