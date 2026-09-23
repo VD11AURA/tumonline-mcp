@@ -1,0 +1,27 @@
+[project]
+name = "tumonline-mcp"
+version = "0.1.0"
+description = "MCP-Server fürs TUM-Studium: TUMonline, Räume (NavigaTUM), Mensa, Moodle"
+authors = [
+    { name = "Vincent Diefenbach", email = "hallo64789@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.28.1",
+    "mcp>=2",
+    "python-dotenv>=1.2.3",
+]
+
+[project.scripts]
+tumonline-mcp = "tumonline_mcp.server:run"
+tumonline-token = "tumonline_mcp.token_setup:main"
+moodle-token = "tumonline_mcp.token_setup:moodle_main"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

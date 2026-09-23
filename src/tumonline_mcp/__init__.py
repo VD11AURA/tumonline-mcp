@@ -1,0 +1,1 @@
+"""TUMonline MCP-Server."""
