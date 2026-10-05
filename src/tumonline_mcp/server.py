@@ -166,7 +166,7 @@ async def status() -> dict:
 
     tum: dict = {"base_url": client.base_url(), "token_gesetzt": bool(client.token())}
     if not tum["token_gesetzt"]:
-        tum.update(ok=False, hinweis="TUMONLINE_TOKEN fehlt in der .env.")
+        tum.update(ok=False, hinweis="TUMONLINE_TOKEN fehlt. Einrichten mit `tumonline-token <TUM-Kennung>`.")
     else:
         try:
             root = await client.call("isTokenConfirmed")
@@ -175,7 +175,7 @@ async def status() -> dict:
             if not confirmed:
                 tum["hinweis"] = (
                     "Token ist nicht aktiviert. In TUMonline: Visitenkarte → Token-Management "
-                    "→ Token 'MacBook Claude MCP' aktivieren und Rechte freigeben."
+                    "→ Token 'Claude MCP …' aktivieren und Rechte freigeben."
                 )
         except Exception as e:  # noqa: BLE001 - status soll nie werfen
             tum.update(ok=False, fehler=str(e))
@@ -183,7 +183,7 @@ async def status() -> dict:
 
     moo: dict = {"base_url": mdl.base_url(), "token_gesetzt": bool(mdl.token())}
     if not moo["token_gesetzt"]:
-        moo.update(ok=False, hinweis="MOODLE_TOKEN fehlt (optional). Einrichten mit `uv run moodle-token`.")
+        moo.update(ok=False, hinweis="MOODLE_TOKEN fehlt (optional). Einrichten mit `moodle-token`.")
     else:
         try:
             site = await mdl.site_info()

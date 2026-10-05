@@ -2,22 +2,31 @@
 
 TUMonline: fordert einen neuen Token an und schreibt ihn in die .env, ohne ihn anzuzeigen.
 
-Aufruf:  uv run tumonline-token <TUM-Kennung>      # neuen Token anfordern
-         uv run tumonline-token --check            # prüfen, ob er aktiviert ist
-         uv run moodle-token [--check]             # Moodle-Token verdeckt eintragen/prüfen
+Aufruf:  tumonline-token <TUM-Kennung>      # neuen Token anfordern
+         tumonline-token --check            # prüfen, ob er aktiviert ist
+         moodle-token [--check]             # Moodle-Token verdeckt eintragen/prüfen
+(im Git-Checkout jeweils mit `uv run` davor)
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import socket
 import sys
 
 from dotenv import set_key
 
 from . import client
 
-TOKEN_NAME = "MacBook Claude MCP"
+TOKEN_NAME = f"Claude MCP {socket.gethostname().removesuffix('.local')}"[:40]
+
+
+def ensure_env_file() -> None:
+    """Legt die .env (nur für den Benutzer lesbar) an, falls sie fehlt."""
+    client.ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    client.ENV_FILE.touch()
+    client.ENV_FILE.chmod(0o600)
 
 
 async def _request(kennung: str) -> int:
@@ -31,14 +40,12 @@ async def _request(kennung: str) -> int:
     if root.tag != "token" or not new_token:
         print("Unerwartete Antwort von TUMonline, kein Token erhalten.")
         return 1
-    if not client.ENV_FILE.exists():
-        client.ENV_FILE.touch()
-    client.ENV_FILE.chmod(0o600)
+    ensure_env_file()
     set_key(str(client.ENV_FILE), "TUMONLINE_TOKEN", new_token, quote_mode="never")
     print(f"Neuer Token '{TOKEN_NAME}' angefordert und in {client.ENV_FILE} gespeichert (wird nicht angezeigt).")
     print("Jetzt aktivieren: TUMonline → Visitenkarte → Token-Management → Token")
     print(f"'{TOKEN_NAME}' aktivieren und Rechte für Kalender, Lehrveranstaltungen und Noten freigeben.")
-    print("Danach prüfen mit:  uv run tumonline-token --check")
+    print("Danach prüfen mit:  tumonline-token --check")
     return 0
 
 
@@ -110,9 +117,7 @@ def moodle_main() -> None:
             if not value:
                 print("Nichts eingegeben, abgebrochen.")
                 sys.exit(1)
-            if not client.ENV_FILE.exists():
-                client.ENV_FILE.touch()
-            client.ENV_FILE.chmod(0o600)
+            ensure_env_file()
             set_key(str(client.ENV_FILE), "MOODLE_TOKEN", value, quote_mode="never")
             print(f"Gespeichert in {client.ENV_FILE}.")
         sys.exit(asyncio.run(_check_moodle()))

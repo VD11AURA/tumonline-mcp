@@ -14,6 +14,7 @@ dependencies = [
 
 [project.scripts]
 tumonline-mcp = "tumonline_mcp.server:run"
+tumonline-setup = "tumonline_mcp.setup:main"
 tumonline-token = "tumonline_mcp.token_setup:main"
 moodle-token = "tumonline_mcp.token_setup:moodle_main"
 moodle-sync = "tumonline_mcp.sync_cli:main"

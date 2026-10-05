@@ -19,10 +19,10 @@ from datetime import date, datetime
 from pathlib import Path
 
 from . import moodle
-from .client import PROJECT_DIR, setting
+from .client import CONFIG_DIR, setting
 from .http import ServiceError
 
-STATE_DIR = PROJECT_DIR / ".state"
+STATE_DIR = CONFIG_DIR / ".state"
 MAPPING_FILE = STATE_DIR / "moodle_ordner.json"
 SYNC_STATE_FILE = STATE_DIR / "moodle_sync.json"
 

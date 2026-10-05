@@ -48,7 +48,7 @@ async def call(function: str, ttl: float = CACHE_SECONDS, **params):
     if not token():
         raise MoodleError(
             "MOODLE_TOKEN ist leer. Token holen: moodle.tum.de → Profil → Einstellungen → "
-            "Sicherheitsschlüssel → 'Moodle mobile web service', dann `uv run moodle-token` ausführen."
+            "Sicherheitsschlüssel → 'Moodle mobile web service', dann `moodle-token` ausführen."
         )
     params = _flatten(params)
     params.update(wstoken=token(), wsfunction=function, moodlewsrestformat="json")

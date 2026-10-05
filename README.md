@@ -28,7 +28,14 @@ die TUM Eat-API und Moodle über die Moodle-Webservice-API.
 
 TUMonline-Antworten werden 5 Minuten zwischengespeichert, Raumdaten 24 Stunden, Speisepläne 1 Stunde.
 
-## Setup
+## Installation
+
+Für andere Rechner und Personen: siehe [INSTALL.md](INSTALL.md) (ein Prompt in Claude Code
+oder ein Terminal-Befehl; macOS, Linux, Windows). Konfiguration liegt dann in
+`~/.config/tumonline-mcp/.env`, `tumonline-setup` trägt den Server in Claude Code und
+Claude Desktop/Cowork ein.
+
+## Setup im Git-Checkout (Entwicklung)
 
 ```sh
 uv sync
@@ -42,7 +49,9 @@ uv run moodle-token                       # optional: Moodle-Token verdeckt eint
 `.env`-Schlüssel: `TUMONLINE_TOKEN`, `TUMONLINE_BASE_URL`, `MOODLE_TOKEN`, `MOODLE_BASE_URL`,
 `MENSA_DEFAULT`, `STUDIUM_DIR`, `MOODLE_SYNC_DIR`, `MOODLE_SYNC_MAX_MB`, `MOODLE_AUTO_SYNC`
 (alle außer `TUMONLINE_TOKEN` optional, siehe `.env.example`). Die `.env` wird bei jedem Aufruf
-relativ zum Projektordner gelesen; neue Tokens greifen ohne Neustart.
+frisch gelesen, neue Tokens greifen ohne Neustart. Ort: im Git-Checkout der Projektordner,
+installiert `~/.config/tumonline-mcp/`, mit `TUMONLINE_MCP_HOME` frei wählbar (dort liegt auch
+`.state/`).
 
 Moodle-Token: moodle.tum.de → Profilbild → Einstellungen → Sicherheitsschlüssel →
 Schlüssel für „Moodle mobile web service“.
@@ -60,11 +69,11 @@ erkannt (`…_WS2627`, `…_SS27`), das Fach an vorhandenen Ordnern (`Analysis1`
 (`Übungen`, `Skript`, `Altklausuren`, sonst `Moodle-Sonstiges`). `Mitschriften` wird nie
 angefasst. Nur aktuelle Kurse, Dateien > 100 MB werden übersprungen.
 
-Die Zuordnung Kurs → Ordner steht nach dem ersten Lauf in `.state/moodle_ordner.json`;
+Die Zuordnung Kurs → Ordner steht nach dem ersten Lauf in `.state/moodle_ordner.json` (neben der `.env`);
 dort `"ordner"` ändern oder `"aktiv": false` setzen. Lokal veränderte Dateien werden nie
 überschrieben – neue Moodle-Versionen landen daneben als `Name (Moodle JJJJ-MM-TT).pdf`.
 
-## Wächter (Mitteilungen)
+## Wächter (Mitteilungen, nur macOS, Git-Checkout)
 
 `tum-watch` meldet per macOS-Mitteilung: neue Noten, abgesagte/verlegte Termine und
 Raumänderungen (nächste 14 Tage), neue Moodle-Ankündigungen und neu geladene Moodle-Dateien.
