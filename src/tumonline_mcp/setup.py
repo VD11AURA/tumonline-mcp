@@ -29,12 +29,30 @@ def server_command() -> str:
     return shutil.which("tumonline-mcp") or str(exe)
 
 
-def desktop_config_file() -> Path:
+CONFIG_NAME = "claude_desktop_config.json"
+
+
+def desktop_config_files() -> list[Path]:
+    """Alle Orte, an denen Claude Desktop seine Konfiguration liest.
+
+    Windows: Die Store-/MSIX-Version (heute der normale Installer) sieht %APPDATA% virtualisiert
+    und liest aus Packages\\Claude_*\\LocalCache\\Roaming\\Claude. Was ein anderer Prozess nach
+    %APPDATA%\\Claude schreibt, kommt dort nie an. Deshalb werden beide Orte bedient.
+    """
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+        return [Path.home() / "Library" / "Application Support" / "Claude" / CONFIG_NAME]
     if os.name == "nt":
-        return Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "Claude" / "claude_desktop_config.json"
-    return Path.home() / ".config" / "Claude" / "claude_desktop_config.json"
+        files = []
+        if local := os.environ.get("LOCALAPPDATA"):
+            for package in sorted(Path(local, "Packages").glob("Claude_*")):
+                files.append(package / "LocalCache" / "Roaming" / "Claude" / CONFIG_NAME)
+        files.append(Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) / "Claude" / CONFIG_NAME)
+        return files
+    return [Path.home() / ".config" / "Claude" / CONFIG_NAME]
+
+
+def _is_msix(path: Path) -> bool:
+    return "LocalCache" in path.parts
 
 
 def register_claude_code(command: str) -> str:
@@ -53,24 +71,31 @@ def register_claude_code(command: str) -> str:
     return f"Claude Code: Eintragen fehlgeschlagen: {output}"
 
 
-def register_claude_desktop(command: str) -> str:
-    path = desktop_config_file()
-    if not path.parent.exists():
-        return "Claude Desktop: nicht installiert, übersprungen."
+def _register_in(path: Path, command: str) -> str:
     config: dict = {}
-    if path.exists() and path.read_text(encoding="utf-8").strip():
+    # utf-8-sig: Windows-Editoren schreiben gern ein BOM an den Anfang.
+    if path.exists() and (text := path.read_text(encoding="utf-8-sig")).strip():
         try:
-            config = json.loads(path.read_text(encoding="utf-8"))
+            config = json.loads(text)
         except json.JSONDecodeError as e:
-            return f"Claude Desktop: {path} ist kein gültiges JSON ({e}), nicht verändert."
+            return f"{path} ist kein gültiges JSON ({e}), nicht verändert."
     servers = config.setdefault("mcpServers", {})
-    if SERVER_NAME in servers:
-        return f"Claude Desktop: '{SERVER_NAME}' ist schon eingetragen, unverändert gelassen."
+    if servers.get(SERVER_NAME, {}).get("command") == command:
+        return "schon eingetragen."
     if path.exists():
         shutil.copy2(path, path.with_suffix(".json.bak"))
     servers[SERVER_NAME] = {"command": command, "args": []}
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(config, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    return "Claude Desktop/Cowork: eingetragen (Claude Desktop ganz beenden und neu öffnen)."
+    return "eingetragen (Claude Desktop ganz beenden, auch im Infobereich, und neu öffnen)."
+
+
+def register_claude_desktop(command: str) -> str:
+    # MSIX-Pfade zählen, sobald das Paket existiert (Ordner legt die App sonst erst beim Start an).
+    targets = [p for p in desktop_config_files() if _is_msix(p) or p.parent.exists()]
+    if not targets:
+        return "Claude Desktop: nicht installiert, übersprungen."
+    return "\n".join(f"Claude Desktop/Cowork ({p.parent}): {_register_in(p, command)}" for p in targets)
 
 
 async def token_step(kennung: str | None) -> str:
