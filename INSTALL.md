@@ -35,7 +35,10 @@ Danach weiter bei Schritt 3 unten.
    - macOS/Linux:
      `curl -LsSf https://raw.githubusercontent.com/VD11AURA/tumonline-mcp/main/install.sh | sh -s -- <KENNUNG>`
    - Windows: falls `uv` fehlt, mit
-     `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` installieren, dann
+     `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"` installieren.
+     Bei einem Update vorher laufende Server beenden (Windows sperrt die .exe, sonst bricht die
+     Installation mittendrin ab):
+     `Get-Process | ? { $_.Path -like "*uv\tools\tumonline-mcp*" } | Stop-Process -Force`, dann
      `uv tool install --reinstall https://github.com/VD11AURA/tumonline-mcp/archive/refs/heads/main.zip`
      und `& "$(uv tool dir --bin)\tumonline-setup.exe" <KENNUNG>`.
 
@@ -60,6 +63,8 @@ Danach weiter bei Schritt 3 unten.
 ## Aktualisieren, Entfernen
 
 - Aktualisieren: denselben Installationsbefehl erneut ausführen (Token und Einstellungen bleiben).
+  Wer Moodle bisher mit `moodle-token` angebunden hatte: einmal `moodle-login` ausführen, TUM-Moodle
+  nimmt die alten Mobile-Tokens nicht mehr an.
 - Entfernen: `uv tool uninstall tumonline-mcp`, `claude mcp remove -s user tumonline`, den Eintrag
   `tumonline` aus `claude_desktop_config.json` löschen und `~/.config/tumonline-mcp` löschen.
 
