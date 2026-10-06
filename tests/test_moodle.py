@@ -78,7 +78,7 @@ def fake_moodle(tmp_path, monkeypatch):
 def test_sync_sorts_into_existing_folders(fake_moodle):
     sem, _, downloads = fake_moodle
     r = asyncio.run(moodle_sync.sync())
-    got = {str(p.relative_to(sem)) for p in downloads}
+    got = {p.relative_to(sem).as_posix() for p in downloads}
     assert got == {
         "Analysis1/Übungen/blatt01.pdf",
         "Analysis1/Übungen/Lösungen/Woche 1/loesung01.pdf",

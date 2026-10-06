@@ -43,18 +43,23 @@ cp .env.example .env
 uv run tumonline-token <TUM-Kennung>      # fordert eigenen Token an, schreibt ihn in .env
 # TUMonline → Visitenkarte → Token-Management → Token aktivieren, Rechte freigeben
 uv run tumonline-token --check
-uv run moodle-token                       # optional: Moodle-Token verdeckt eintragen und prüfen
+uv run moodle-login                       # optional: Moodle über TUM-Login (Kennung + Passwort)
 ```
 
-`.env`-Schlüssel: `TUMONLINE_TOKEN`, `TUMONLINE_BASE_URL`, `MOODLE_TOKEN`, `MOODLE_BASE_URL`,
+`.env`-Schlüssel: `TUMONLINE_TOKEN`, `TUMONLINE_BASE_URL`, `MOODLE_USERNAME`, `MOODLE_TOKEN`, `MOODLE_BASE_URL`,
 `MENSA_DEFAULT`, `STUDIUM_DIR`, `MOODLE_SYNC_DIR`, `MOODLE_SYNC_MAX_MB`, `MOODLE_AUTO_SYNC`
 (alle außer `TUMONLINE_TOKEN` optional, siehe `.env.example`). Die `.env` wird bei jedem Aufruf
 frisch gelesen, neue Tokens greifen ohne Neustart. Ort: im Git-Checkout der Projektordner,
 installiert `~/.config/tumonline-mcp/`, mit `TUMONLINE_MCP_HOME` frei wählbar (dort liegt auch
 `.state/`).
 
-Moodle-Token: moodle.tum.de → Profilbild → Einstellungen → Sicherheitsschlüssel →
-Schlüssel für „Moodle mobile web service“.
+Moodle: TUM-Moodle hat den „Moodle mobile web service“ abgeschaltet, Tokens gibt es dort nicht
+mehr. `moodle-login` fragt deshalb TUM-Kennung und Passwort ab, legt das Passwort im
+Schlüsselbund des Betriebssystems ab (Windows: Anmeldeinformationsverwaltung, macOS: Schlüsselbund)
+und meldet sich über TUM-SSO an wie ein Browser. Abgelaufene Sitzungen werden automatisch erneuert.
+Genutzt werden die Schnittstellen der Moodle-Weboberfläche (`lib/ajax/service.php`) und normale
+Seiten (Forum, Bewertungsbericht, Ressourcen). `moodle-login --logout` löscht Passwort und Sitzung.
+Wo es noch Mobile-Tokens gibt, geht weiterhin `moodle-token`; ein gesetzter `MOODLE_TOKEN` hat Vorrang.
 
 ## Moodle-Dateien in die Studium-Ordner
 

@@ -102,7 +102,7 @@ async def run_once(dry_run: bool = False) -> int:
     first_run = not state
     errors = 0
     checks = [check_grades, check_calendar]
-    if moodle.token():
+    if moodle.configured():
         checks.append(check_moodle)
     for check in checks:
         try:

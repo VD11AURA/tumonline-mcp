@@ -192,7 +192,7 @@ async def sync(dry_run: bool = False, max_mb: float | None = None) -> dict:
         if entry.get("aktiv", True) is False:
             continue
         try:
-            contents = await moodle.call("core_course_get_contents", courseid=course["id"])
+            contents = await moodle.contents(course["id"])
         except ServiceError as e:
             result["fehler"].append(f"{entry['name']}: {e}")
             continue
@@ -215,7 +215,7 @@ async def sync(dry_run: bool = False, max_mb: float | None = None) -> dict:
                     kind = "neben_lokaler_aenderung"
                     if target.exists():
                         continue
-            result[kind].append(str(target.relative_to(sem_dir)) if target.is_relative_to(sem_dir) else str(target))
+            result[kind].append(target.relative_to(sem_dir).as_posix() if target.is_relative_to(sem_dir) else str(target))
             if dry_run:
                 continue
             try:

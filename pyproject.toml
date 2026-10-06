@@ -8,6 +8,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.28.1",
+    "keyring>=25",
     "mcp>=2",
     "python-dotenv>=1.2.3",
 ]
@@ -17,6 +18,7 @@ tumonline-mcp = "tumonline_mcp.server:run"
 tumonline-setup = "tumonline_mcp.setup:main"
 tumonline-token = "tumonline_mcp.token_setup:main"
 moodle-token = "tumonline_mcp.token_setup:moodle_main"
+moodle-login = "tumonline_mcp.token_setup:moodle_login_main"
 moodle-sync = "tumonline_mcp.sync_cli:main"
 tum-watch = "tumonline_mcp.watch:main"
 

@@ -1,4 +1,8 @@
-"""TUM-Moodle über die Webservice-REST-API (Token: Moodle mobile web service)."""
+"""TUM-Moodle: Webservice-REST-API mit Token, sonst über die TUM-Login-Sitzung.
+
+Mit MOODLE_TOKEN (Moodle mobile web service) wird die REST-API genutzt. TUM-Moodle vergibt diese
+Tokens nicht mehr; dann läuft alles über moodle_session/moodle_web (Anmeldung: `moodle-login`).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ import re
 import time
 from datetime import datetime
 
+from . import moodle_session, moodle_web
 from .client import setting
 from .http import ServiceError, download, get_json
 
@@ -24,6 +29,15 @@ def base_url() -> str:
 
 def token() -> str:
     return setting("MOODLE_TOKEN")
+
+
+def uses_session() -> bool:
+    """Kein Token, aber TUM-Login eingerichtet: alles über die Browser-Sitzung."""
+    return not token() and moodle_session.is_configured()
+
+
+def configured() -> bool:
+    return bool(token()) or moodle_session.is_configured()
 
 
 def _flatten(params: dict) -> dict:
@@ -46,9 +60,11 @@ def html_to_text(value: str, limit: int = 2000) -> str:
 
 async def call(function: str, ttl: float = CACHE_SECONDS, **params):
     if not token():
+        if moodle_session.is_configured():
+            return await moodle_session.ajax(function, params)
         raise MoodleError(
-            "MOODLE_TOKEN ist leer. Token holen: moodle.tum.de → Profil → Einstellungen → "
-            "Sicherheitsschlüssel → 'Moodle mobile web service', dann `moodle-token` ausführen."
+            "Moodle ist nicht eingerichtet. In einem Terminal `moodle-login` ausführen "
+            "(TUM-Kennung und Passwort) – oder, wo es noch Mobile-Tokens gibt, `moodle-token`."
         )
     params = _flatten(params)
     params.update(wstoken=token(), wsfunction=function, moodlewsrestformat="json")
@@ -63,10 +79,14 @@ def _ts(ts: int | None) -> str:
 
 
 async def site_info() -> dict:
+    if uses_session():
+        return await moodle_web.site_info()
     return await call("core_webservice_get_site_info", ttl=3600)
 
 
 async def raw_courses() -> list[dict]:
+    if uses_session():
+        return await moodle_web.raw_courses()
     info = await site_info()
     return [c for c in await call("core_enrol_get_users_courses", userid=info["userid"]) if not c.get("hidden")]
 
@@ -114,8 +134,16 @@ async def deadlines(days: int) -> list[dict]:
     return out
 
 
+async def contents(course_id: int, with_files: bool = True) -> list[dict]:
+    """Abschnitte mit Modulen im Format von core_course_get_contents."""
+    if uses_session():
+        return await moodle_web.course_contents(course_id, with_files=with_files)
+    return await call("core_course_get_contents", courseid=course_id)
+
+
 async def course_contents(course_id: int) -> list[dict]:
-    data = await call("core_course_get_contents", courseid=course_id)
+    # Ohne Dateiauflösung über die Sitzung: die markiert in Moodle jede Ressource als "angesehen".
+    data = await contents(course_id, with_files=False)
     sections = []
     for s in data:
         modules = []
@@ -138,6 +166,8 @@ async def announcements(course_ids: list[int], days: int, limit_per_course: int 
     """Beiträge der Nachrichtenforen (Ankündigungen der Lehrenden), neueste zuerst."""
     if not course_ids:
         return []
+    if uses_session():
+        return await moodle_web.announcements(course_ids, days, limit_per_course)
     forums = await call("mod_forum_get_forums_by_courses", courseids=course_ids)
     since = time.time() - days * 86400
     out = []
@@ -174,8 +204,11 @@ def _num(value) -> float | None:
 
 async def grades(course_id: int) -> dict:
     """Bewertungen eines Kurses (z. B. Übungspunkte) mit Summe der erreichten Punkte."""
-    info = await site_info()
-    data = await call("gradereport_user_get_grade_items", courseid=course_id, userid=info["userid"])
+    if uses_session():
+        data = await moodle_web.grade_items(course_id)
+    else:
+        info = await site_info()
+        data = await call("gradereport_user_get_grade_items", courseid=course_id, userid=info["userid"])
     users = data.get("usergrades") or []
     items, total = [], None
     for g in (users[0].get("gradeitems", []) if users else []):
@@ -206,4 +239,6 @@ async def grades(course_id: int) -> dict:
 
 
 async def file_download(fileurl: str, dest) -> int:
+    if uses_session():
+        return await moodle_session.download(fileurl, dest)
     return await download(fileurl, {"token": token()}, dest, label="Moodle-Datei")

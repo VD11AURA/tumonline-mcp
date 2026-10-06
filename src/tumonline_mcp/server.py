@@ -181,9 +181,10 @@ async def status() -> dict:
             tum.update(ok=False, fehler=str(e))
     info["tumonline"] = tum
 
-    moo: dict = {"base_url": mdl.base_url(), "token_gesetzt": bool(mdl.token())}
-    if not moo["token_gesetzt"]:
-        moo.update(ok=False, hinweis="MOODLE_TOKEN fehlt (optional). Einrichten mit `moodle-token`.")
+    moo: dict = {"base_url": mdl.base_url(), "token_gesetzt": bool(mdl.token()),
+                 "zugang": "token" if mdl.token() else ("tum-login" if mdl.uses_session() else "keiner")}
+    if not mdl.configured():
+        moo.update(ok=False, hinweis="Moodle nicht eingerichtet (optional). In einem Terminal `moodle-login` ausführen.")
     else:
         try:
             site = await mdl.site_info()
@@ -397,7 +398,10 @@ async def moodle_fristen(tage: int = 14) -> list[dict]:
 
 @mcp.tool()
 async def moodle_kursinhalt(kurs_id: int) -> list[dict]:
-    """Abschnitte, Materialien und Dateinamen eines Moodle-Kurses (mit Änderungsdatum)."""
+    """Abschnitte, Materialien und Dateinamen eines Moodle-Kurses (mit Änderungsdatum).
+
+    Mit TUM-Login (ohne Token) nur Abschnitte und Materialien, Dateien liefert `moodle_sync`.
+    """
     return await mdl.course_contents(kurs_id)
 
 

@@ -49,9 +49,9 @@ Danach weiter bei Schritt 3 unten.
    der Nutzer das bestätigt, dann prüfen:
    `"$(uv tool dir --bin)/tumonline-token" --check` (Windows: `tumonline-token.exe`).
 
-4. **Moodle (optional)**: Der Nutzer öffnet ein eigenes Terminal und führt `moodle-token` aus
-   (verdeckte Eingabe). Den Token findet er unter moodle.tum.de → Profilbild → Einstellungen →
-   Sicherheitsschlüssel → „Moodle mobile web service“.
+4. **Moodle (optional)**: Der Nutzer öffnet ein eigenes Terminal und führt `moodle-login` aus
+   (TUM-Kennung und Passwort, Passwort verdeckt; es landet im Schlüsselbund des Betriebssystems).
+   Das Passwort nie in den Chat geben lassen. Mobile-Tokens vergibt TUM-Moodle nicht mehr.
 
 5. **Neu starten**: Claude Code neu starten; Claude Desktop ganz beenden und wieder öffnen.
    Danach testen, z. B. mit „Was steht heute in meinem Stundenplan?“ (bei Problemen das Tool

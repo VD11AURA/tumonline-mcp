@@ -111,7 +111,7 @@ def main() -> None:
     except client.TUMonlineError as e:
         print(f"TUMonline: {e}")
         sys.exit(1)
-    print("\nOptional Moodle: in einem Terminal  moodle-token  ausführen (Token wird verdeckt eingegeben).")
+    print("\nOptional Moodle: in einem Terminal  moodle-login  ausführen (TUM-Kennung + Passwort, verdeckt).")
 
 
 if __name__ == "__main__":

@@ -124,3 +124,62 @@ def moodle_main() -> None:
     except Exception as e:  # noqa: BLE001 - verständliche Meldung statt Traceback
         print(e)
         sys.exit(1)
+
+
+MOODLE_LOGIN_HELP = """\
+Moodle über den TUM-Login anbinden (für TUM-Moodle nötig, dort gibt es keine Mobile-Tokens mehr).
+
+Fragt TUM-Kennung und Passwort ab (Passwort unsichtbar). Das Passwort wird im Schlüsselbund des
+Betriebssystems gespeichert (Windows: Anmeldeinformationsverwaltung, macOS: Schlüsselbund), nicht
+in der .env. Der Server meldet sich damit selbst neu an, wenn die Moodle-Sitzung abläuft.
+"""
+
+
+async def _check_moodle_login() -> int:
+    from . import moodle_session
+
+    s = await moodle_session.session()
+    await moodle_session.ajax("core_session_time_remaining")
+    print(f"Moodle-Anmeldung funktioniert (Benutzer-ID {s.userid}).")
+    return 0
+
+
+def moodle_login_main() -> None:
+    import getpass
+
+    from . import moodle_session
+
+    p = argparse.ArgumentParser(prog="moodle-login", description=MOODLE_LOGIN_HELP,
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--check", action="store_true", help="nur prüfen, ob die Anmeldung funktioniert")
+    p.add_argument("--logout", action="store_true", help="Passwort und Sitzung löschen")
+    args = p.parse_args()
+    try:
+        if args.logout:
+            moodle_session.delete_credentials(moodle_session.username())
+            moodle_session.SESSION_FILE.unlink(missing_ok=True)
+            print("Moodle-Passwort und -Sitzung gelöscht.")
+            return
+        if not args.check:
+            print(MOODLE_LOGIN_HELP)
+            default = moodle_session.username()
+            user = input(f"TUM-Kennung{f' [{default}]' if default else ''}: ").strip() or default
+            pw = getpass.getpass("TUM-Passwort (Eingabe unsichtbar): ")
+            if not user or not pw:
+                print("Nichts eingegeben, abgebrochen.")
+                sys.exit(1)
+            print("Melde an …")
+            s = asyncio.run(moodle_session.login(user, pw))
+            moodle_session.store_credentials(user, pw)
+            ensure_env_file()
+            set_key(str(client.ENV_FILE), "MOODLE_USERNAME", user, quote_mode="never")
+            if client.setting("MOODLE_TOKEN"):
+                # Ein alter Mobile-Token hätte Vorrang, funktioniert an der TUM aber nicht mehr.
+                set_key(str(client.ENV_FILE), "MOODLE_TOKEN", "", quote_mode="never")
+                print("Alten MOODLE_TOKEN aus der .env entfernt (TUM vergibt keine Mobile-Tokens mehr).")
+            s.save()
+            print(f"Angemeldet. Passwort im Schlüsselbund gespeichert, Kennung in {client.ENV_FILE}.")
+        sys.exit(asyncio.run(_check_moodle_login()))
+    except Exception as e:  # noqa: BLE001 - verständliche Meldung statt Traceback
+        print(e)
+        sys.exit(1)
