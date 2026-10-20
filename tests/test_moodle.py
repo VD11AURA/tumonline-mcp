@@ -36,7 +36,13 @@ CONTENTS = {
             {"modname": "resource", "name": "Video", "contents": [file("vl.mp4", size=500 * 2**20)]},
         ]},
     ],
-    12: [{"name": "Allgemein", "modules": [{"modname": "resource", "name": "Blatt 1", "contents": [file("la_blatt1.pdf")]}]}],
+    12: [
+        {"name": "Allgemein", "modules": [{"modname": "resource", "name": "Blatt 1", "contents": [file("la_blatt1.pdf")]}]},
+        {"name": "Abgaben", "modules": [
+            {"modname": "assign", "name": "Hausaufgabe 1", "contents": [file("hausaufgabenblatt01.pdf")]},
+            {"modname": "assign", "name": "Abgabe Woche 2", "contents": [file("w2.pdf")]},
+        ]},
+    ],
 }
 
 
@@ -86,6 +92,8 @@ def test_sync_sorts_into_existing_folders(fake_moodle):
         "Analysis1/Moodle-Sonstiges/orga.pdf",
         "Analysis1/Altklausuren/probe.pdf",
         "LA1/Übungen/la_blatt1.pdf",
+        "LA1/Übungen/hausaufgabenblatt01.pdf",  # Anhang einer Aufgabe
+        "LA1/Übungen/w2.pdf",  # Aufgabe ohne erkennbare Kategorie → trotzdem Übungen
     }
     assert any("vl.mp4" in x for x in r["uebersprungen_zu_gross"])
     assert [k["kurs"] for k in r["kurse"]] == ["Analysis 1 (MA0001)", "Lineare Algebra 1"]  # alter Kurs fehlt
@@ -111,7 +119,7 @@ def test_sync_is_incremental_and_protects_local_edits(fake_moodle):
 def test_dry_run_downloads_nothing(fake_moodle):
     _, _, downloads = fake_moodle
     r = asyncio.run(moodle_sync.sync(dry_run=True))
-    assert downloads == [] and len(r["neu"]) == 6
+    assert downloads == [] and len(r["neu"]) == 8
 
 
 def test_mapping_can_be_disabled(fake_moodle):
@@ -175,7 +183,7 @@ def test_watch_baseline_then_notifies(fake_moodle, monkeypatch):
 
     asyncio.run(watch.run_once())
     # erster Lauf: keine Einzelmeldungen, nur Datei-Abgleich + Startmeldung
-    assert [t for t, _ in sent] == ["6 neue Moodle-Dateien", "TUM-Wächter aktiv"]
+    assert [t for t, _ in sent] == ["8 neue Moodle-Dateien", "TUM-Wächter aktiv"]
     sent.clear()
 
     notes.append({"lv_nummer": "2", "datum": "2027-02-25", "lv_titel": "Lineare Algebra 1", "uninotenamekurz": "2,0"})

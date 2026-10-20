@@ -4,6 +4,8 @@ Zielordner: <STUDIUM_DIR>/<Semesterordner>/<Fach>/<Kategorie>/<Datei>
 - Semesterordner: der Ordner, dessen Name auf das aktuelle Semester endet (z. B. 01_WS2627).
 - Fach: vorhandener Ordner, der zum Kursnamen passt (Analysis1, LA1, ExPhysik1 …), sonst neu.
 - Kategorie: Übungen / Skript / Altklausuren / Moodle-Sonstiges, anhand von Abschnitt, Modul und Dateiname.
+- Neben Dateien und Ordnern werden auch die Anhänge von Aufgaben (Abgaben, z. B. Hausaufgabenblätter)
+  geladen; ohne erkennbare Kategorie landen sie unter Übungen.
 
 Zuordnungen werden in .state/moodle_ordner.json gespeichert und können dort angepasst werden.
 Lokal veränderte Dateien (z. B. mit Notizen) werden nie überschrieben; neue Moodle-Versionen
@@ -148,13 +150,16 @@ def plan_course_files(contents: list[dict], course_dir: Path) -> list[dict]:
     for section in contents:
         sec_name = section.get("name", "")
         for mod in section.get("modules", []):
-            if not mod.get("uservisible", True) or mod.get("modname") not in ("resource", "folder"):
+            if not mod.get("uservisible", True) or mod.get("modname") not in ("resource", "folder", "assign"):
                 continue
             for c in mod.get("contents", []):
                 if c.get("type") != "file" or not c.get("fileurl"):
                     continue
                 filename = safe_name(c.get("filename", ""))
-                cat_dir = existing_child(course_dir, category(sec_name, mod.get("name", ""), filename))
+                cat = category(sec_name, mod.get("name", ""), filename)
+                if mod.get("modname") == "assign" and cat == OTHER:
+                    cat = "Übungen"  # Anhänge von Abgaben sind praktisch immer Aufgabenblätter
+                cat_dir = existing_child(course_dir, cat)
                 if mod.get("modname") == "folder":
                     sub = [safe_name(p) for p in (c.get("filepath") or "/").strip("/").split("/") if p]
                     target = cat_dir.joinpath(safe_name(mod.get("name", ""), 60), *sub, filename)

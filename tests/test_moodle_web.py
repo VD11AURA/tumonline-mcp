@@ -112,12 +112,14 @@ STATE = {
     "section": [
         {"id": "1", "title": "Allgemein", "cmlist": ["10", "11"], "number": 0},
         {"id": "2", "title": "Übungen", "cmlist": ["12", "13"], "number": 1},
+        {"id": "3", "title": "Abgaben", "cmlist": ["14"], "number": 2},
     ],
     "cm": [
         {"id": "10", "name": "Ankündigungen", "module": "forum", "uservisible": True, "sectionnumber": 0},
         {"id": "11", "name": "Diskussionsforum", "module": "forum", "uservisible": True, "sectionnumber": 0},
         {"id": "12", "name": "Blatt 1", "module": "resource", "uservisible": True, "sectionnumber": 1},
         {"id": "13", "name": "Lösungen &amp; mehr", "module": "folder", "uservisible": True, "sectionnumber": 1},
+        {"id": "14", "name": "Hausaufgabe 1", "module": "assign", "uservisible": True, "sectionnumber": 2},
     ],
 }
 
@@ -147,6 +149,11 @@ def session_moodle(tmp_path, monkeypatch):
         calls["pages"].append(path)
         if "folder" in path:
             return '<a href="https://www.moodle.tum.de/pluginfile.php/6/mod_folder/content/1/l1.pdf?forcedownload=1">', ""
+        if "assign" in path:
+            base = "https://www.moodle.tum.de/pluginfile.php/7/mod_assign"
+            return (f'<a href="{base}/introattachment/0/hausaufgabenblatt01.pdf?forcedownload=1">'
+                    f'<img src="x"><a href="{base}/intro/bild.png">'
+                    '<a href="https://www.moodle.tum.de/pluginfile.php/7/assignsubmission_file/submission_files/9/meine.pdf">'), ""
         if "forum" in path:
             return '<tr class="discussion pinned" data-discussionid="501"></tr><tr data-discussionid="502"></tr>', ""
         raise AssertionError(path)
@@ -157,10 +164,24 @@ def session_moodle(tmp_path, monkeypatch):
     return calls
 
 
+def test_assign_links_skip_images_and_own_submissions():
+    page = ('<a href="https://m/pluginfile.php/7/mod_assign/introattachment/0/Blatt%201.pdf?forcedownload=1">'
+            '<a href="https://m/pluginfile.php/7/mod_assign/introattachment/0/Blatt%201.pdf">'
+            '<a href="https://m/pluginfile.php/7/mod_assign/intro/skizze.png">'
+            '<a href="https://m/pluginfile.php/7/mod_assign/intro/hinweise.pdf">'
+            '<a href="https://m/pluginfile.php/7/assignsubmission_file/submission_files/3/abgabe.pdf">')
+    links = moodle_web.assign_file_links(page)
+    assert links == ["https://m/pluginfile.php/7/mod_assign/introattachment/0/Blatt%201.pdf",
+                     "https://m/pluginfile.php/7/mod_assign/intro/hinweise.pdf"]
+    assert moodle_web._file_entry(links[0], {})["filename"] == "Blatt 1.pdf"
+
+
 def test_course_contents_in_webservice_format(session_moodle):
     contents = asyncio.run(moodle.contents(5))
-    assert [s["name"] for s in contents] == ["Allgemein", "Übungen"]
+    assert [s["name"] for s in contents] == ["Allgemein", "Übungen", "Abgaben"]
     blatt, folder = contents[1]["modules"]
+    (assign,) = contents[2]["modules"]
+    assert [c["filename"] for c in assign["contents"]] == ["hausaufgabenblatt01.pdf"]
     assert blatt["contents"][0]["filename"] == "blatt1.pdf"
     assert folder["name"] == "Lösungen & mehr" and folder["contents"][0]["filename"] == "l1.pdf"
     # zweiter Aufruf aus dem Datei-Cache: keine erneuten Seitenaufrufe

@@ -114,12 +114,33 @@ def folder_file_links(page: str) -> list[str]:
     return list(dict.fromkeys(html.unescape(link) for link in links))
 
 
+IMAGE = re.compile(r"\.(png|jpe?g|gif|svg|webp)$", re.IGNORECASE)
+
+
+def assign_file_links(page: str) -> list[str]:
+    """Angehängte Dateien einer Aufgabe (z. B. das Hausaufgabenblatt) – nicht die eigenen Abgaben."""
+    links = re.findall(r'href="([^"]*/pluginfile\.php/\d+/mod_assign/(?:introattachment|intro|activityattachment)/[^"]+)"', page)
+    links = [html.unescape(link).split("?", 1)[0] for link in links]
+    # In die Beschreibung eingebettete Bilder sind keine Aufgabenblätter
+    links = [l for l in links if not ("/mod_assign/intro/" in l and IMAGE.search(l))]
+    return list(dict.fromkeys(links))
+
+
+# Module, deren Dateien der Abgleich auflöst
+FILE_MODULES = ("resource", "folder", "assign")
+
+
 async def _resolve_files(cm: dict) -> list[dict]:
-    """Dateien einer Ressource bzw. eines Ordners (ruft die Moodle-Seite auf, daher gecacht)."""
+    """Dateien einer Ressource, eines Ordners oder einer Aufgabe (ruft die Moodle-Seite auf, daher gecacht)."""
     if cm["module"] == "resource":
         url, headers = await ms.head("/mod/resource/view.php", {"id": cm["id"], "redirect": 1})
         return [_file_entry(url, headers)] if "/pluginfile.php/" in url else []
-    page, _ = await ms.get_page("/mod/folder/view.php", {"id": cm["id"]})
+    if cm["module"] == "assign":
+        page, _ = await ms.get_page("/mod/assign/view.php", {"id": cm["id"]})
+        links = assign_file_links(page)
+    else:
+        page, _ = await ms.get_page("/mod/folder/view.php", {"id": cm["id"]})
+        links = folder_file_links(page)
     sem = asyncio.Semaphore(HEAD_CONCURRENCY)
 
     async def one(link):
@@ -127,11 +148,11 @@ async def _resolve_files(cm: dict) -> list[dict]:
             url, headers = await ms.head(link)
             return _file_entry(url, headers)
 
-    return list(await asyncio.gather(*(one(link) for link in folder_file_links(page))))
+    return list(await asyncio.gather(*(one(link) for link in links)))
 
 
 async def course_contents(course_id: int, with_files: bool = True) -> list[dict]:
-    """Wie core_course_get_contents: Abschnitte mit Modulen, bei Ressourcen/Ordnern mit Dateien."""
+    """Wie core_course_get_contents: Abschnitte mit Modulen, bei Ressourcen/Ordnern/Aufgaben mit Dateien."""
     state = await course_state(course_id)
     cms = {str(cm["id"]): cm for cm in state.get("cm", [])}
     cache, now, changed = _files_cache(), time.time(), False
@@ -150,7 +171,7 @@ async def course_contents(course_id: int, with_files: bool = True) -> list[dict]
                 "url": f"{ms.base_url()}/mod/{cm.get('module')}/view.php?id={cm['id']}",
                 "contents": [],
             }
-            if with_files and mod["uservisible"] and mod["modname"] in ("resource", "folder"):
+            if with_files and mod["uservisible"] and mod["modname"] in FILE_MODULES:
                 hit = cache.get(str(cm["id"]))
                 if hit and now - hit["t"] < FILES_CACHE_SECONDS:
                     mod["contents"] = hit["files"]
